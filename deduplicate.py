@@ -200,8 +200,10 @@ def main(rootdirpath, filetype=None, exclude=[], move_files=True, move_dir='', r
 
 #RUN
 if __name__=="__main__":
-	
-	dir_to_check='/absolute/path/to/dir/which/is/to/be/checked/'
+
+	#check paths can be both a single path, or a number of paths in a list (handled in scour())
+        # but dir_to_move must be a single dir
+	dir_to_check='/absolute/path(s)/to/dir/which/is/to/be/checked/'
 	dir_to_move="/absolute/path/to/dir/where/duplicate/files/will/be/moved/"
 	
 	#main funcion
