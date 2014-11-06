@@ -1,25 +1,18 @@
 #!/usr/bin/python
 
+from __future__ import print_function
+import sys, hashlib, os, shutil, time
+from collections import Counter
+
+
 #function to remove duplicates in folder by genrating and comparing their hash values
 #has option to remove file automatically or move them to a separate place.
 
-#hash type: MD5/SHA1
-global hashfunc
-hashfunc='MD5'
-
-#add locations in main() where duplicacy may occur, (absolute/paths/only/with/trailing/)
+#add locations here where duplicacy may occur, (absolute/paths/only/with/trailing/)
 global dir_to_check
-dir_to_check=[]
 #all duplicates will be moved into dir_to_move ignoring their relative filestructure.
 global dir_to_move
-dir_to_move=[]
-
-#logs are saved in dir_to_move/
-#	checklogs-> original files and their duplicates
-#	movelogs-> src and dsts of moved files (only when move_files=True) or removed files (only when remove_files=True)
-
-import sys, hashlib, os, shutil, time
-from collections import Counter
+#dir_to_move="/media/xt1/BackThisUp/devices/s2/duplicates/"
 
 #function to get list of files, recursive so more deph==heavier
 def scour(rootdirpath, filetype=None, exclude=[], follow_links=False):
@@ -36,17 +29,17 @@ def scour(rootdirpath, filetype=None, exclude=[], follow_links=False):
 		for item in filelist:
 			#print item
 			if (os.path.splitext(item)[1] not in exclude) & (str(item) not in exclude): #if extension or dirname or linkname not in excludelist
-			#if file
-				if os.path.isfile(filepath+str(item)):
+			#if file, and (if specified) file extension is in filetype
+				if os.path.isfile(os.path.join(filepath, item)):
 					if (filetype==None) or (os.path.splitext(item)[1] in filetype): # if filter is provided, append only files that match the extensions
-						files.append(filepath+str(item))
+						files.append(os.path.join(filepath, item))
 			#if dir	
-				if os.path.isdir(filepath+str(item)):
-					dirs.append(filepath+str(item)+'/')
-					rectree(filepath+str(item)+'/')
+				if os.path.isdir(os.path.join(filepath, item)):
+					dirs.append(os.path.join(filepath, item))
+					rectree(os.path.join(filepath, item))
 			#if symlink
-				if os.path.islink(filepath+str(item)):
-					links.append(filepath+str(item))
+				if os.path.islink(os.path.join(filepath, item)):
+					links.append(os.path.join(filepath, item))
 					#if follow_links==True: #DOES NOT FOLLOW LINKS
 					#	realpath=os.path.realpath(filepath+str(item)) #resolve realpath
 					#	if rootdirpath not in realpath: #if realpath not in root directory (avoids loops) include realpath in scouring
@@ -67,39 +60,38 @@ def scour(rootdirpath, filetype=None, exclude=[], follow_links=False):
 	return files, dirs, links
 
 #deprecated
-def titlecheck(rootdirpath, filetype=None, exclude=[]): #extract titles, convert to counter, check duplicates, print ones which occur >1 with their path
-	titles=[]
-	duptitles=[]
-	oplist=[]
-	filepathlist=scour(rootdirpath, filetype=filetype, exclude=exclude)[0]
-	for path in filepathlist:
-		titles.append(os.path.basename(path))
-	titlecount=Counter(titles)
-	for path in filepathlist:
-		title=os.path.basename(path)
-		if titlecount[title] > 1: #select only titles that have more than 1 occurance
-			if title not in duptitles:
-				print "Original:", title, path
-				duptitles.append(title)
-			else:
-				print "Duplicate:", title, path
-				oplist.append(path)
-	duptitles.sort()
-	print "\n\nTotal Files:", len(filepathlist)
-	print "Total unique filenames:", len(titlecount)
-	print "Total filenames that have duplicates:", len(duptitles), "\n\n"
-	print oplist
-	return oplist #list of files that have duplicate names
+#def titlecheck(rootdirpath, filetype=None, exclude=[]): #extract titles, convert to counter, check duplicates, print ones which occur >1 with their path
+#	titles=[]
+#	duptitles=[]
+#	oplist=[]
+#	filepathlist=scour(rootdirpath, filetype=filetype, exclude=exclude)[0]
+#	for path in filepathlist:
+#		titles.append(os.path.basename(path))
+#	titlecount=Counter(titles)
+#	for path in filepathlist:
+#		title=os.path.basename(path)
+#		if titlecount[title] > 1: #select only titles that have more than 1 occurance
+#			if title not in duptitles:
+#				print "Original:", title, path
+#				duptitles.append(title)
+#			else:
+#				print "Duplicate:", title, path
+#				oplist.append(path)
+#	duptitles.sort()
+#	print "\n\nTotal Files:", len(filepathlist)
+#	print "Total unique filenames:", len(titlecount)
+#	print "Total filenames that have duplicates:", len(duptitles), "\n\n"
+#	print oplist
+#	return oplist #list of files that have duplicate names
 
-#MD5 based hasher	
-def md5sum(filepath): #hash func
-	md5 = hashlib.md5()
-	with open(filepath,'rb') as f: 
-		for chunk in iter(lambda: f.read(128*md5.block_size), b''): 
-			md5.update(chunk)
-	return md5.hexdigest()
+#deprecated	
+#def md5sum(filepath): #hash func
+#	md5 = hashlib.md5()
+#	with open(filepath,'rb') as f: 
+#		for chunk in iter(lambda: f.read(128*md5.block_size), b''): 
+#			md5.update(chunk)
+#	return md5.hexdigest()
 
-#sha1 based hasher
 def sha1sum(filepath): #hash func
 	sha1 = hashlib.sha1()
 	with open(filepath,'rb') as f: 
@@ -107,104 +99,110 @@ def sha1sum(filepath): #hash func
 			sha1.update(chunk)
 	return sha1.hexdigest()
 
-#logs
-def logtofile(string, filepath=""):
-	file=open(filepath, 'a')
-	file.write(string)
-	file.close()
-	print string
-	return
-
-#gets filelish, checks hashes, returns duplicate files list
-def hashcheck(rootdirpath, filetype=None, exclude=[], logging=False, hashfunc=hashfunc): #gen filelist, list hashes, detect duplicates by hashes, return duplicate files
-	i=1 #counter  for hash
-	#j=1 #counter for checking duplicates
-
-	hashes=[] #holds all file hashes for easy checking
-	hashlist=[] #holds all hashes, filenames and paths
-	duphashes=[] #holds all file-hashes which have duplicates
-	oplist=[] #holds all file-hashes which are the duplicates
-	
-	#generating list of filepaths
+def hashcheck(rootdirpath, filetype=None, exclude=[]): #gen filelist, list hashes, detect duplicates by hashes, return duplicate files
+	i=1
+	#j=1
+	hashes=[]
+	hashlist=[]
+	duphashes=[]
+	oplist=[]
 	filepathlist=scour(rootdirpath, filetype=filetype, exclude=exclude)[0]
-	print "\nTotal Files:", len(filepathlist)
-	
+	print("\nTotal Files:", len(filepathlist))
 	for path in filepathlist: #hashing
-		i+=1
-		print "Hashing done:", i*100/len(filepathlist)
+		print("Hashing done:", i*100/len(filepathlist))
 		title=os.path.basename(path)
-		if hashfunc=='MD5': filehash=md5sum(path)
-		elif hashfunc=='SHA1': filehash=sha1sum(path)
-		else: 
-			print "Please set hash function."
-			return
+		filehash=sha1sum(path)
 		hashes.append(filehash)
 		hashlist.append([filehash, title, path])
-		#clearscreen
-		os.system('cls' if os.name == 'nt' else 'clear')
-	print "\nFinished hashing..."
-
-	hashcount=Counter(hashes) #the files which have duplicates will have a >1 frequency in counter
+		i+=1
+	print("\nFinished hashing...")
+	hashcount=Counter(hashes)
 	#print hashcount
 	hashlist.sort()
-
-	#checking duplicates
-	print "Checking for duplicates..."
-	for fhash in hashcount: 
+	print("Checking for duplicates...")
+	for fhash in hashcount: #getting duplicates
 		#j+=1
 		#print "Checking done:", j*100/len(hashcount)
 		if hashcount[fhash]>1:
 			for item in hashlist:
 				filehash, title, path=item
-				#if file has no duplicates yet, must be the original file, hash into duphashes[]
 				if fhash==filehash and filehash not in duphashes:
-					print "\nOriginal:", title, "("+filehash+")"
-					print "Copies:", hashcount[filehash]-1,"\n", path
-					if logging: logtofile("orig:"+filehash+"--"+path+"\n", filepath=dir_to_move+'checklog')
+					print("\nOriginal:", title, "("+filehash+")")
+					print("Copies:", hashcount[filehash]-1)
+					print(path)
 					duphashes.append(filehash)
-				
-				#if hash already inserted, must be duplicate file, path into oplist[]
 				elif fhash==filehash and filehash in duphashes:
-					print "\nDuplicate:", title, "("+filehash+")","\n", path
-					if logging: logtofile("dupl:"+filehash+"--"+path+"\n", filepath=dir_to_move+'checklog')
+					print("\nDuplicate:", title, "("+filehash+")","\n", path)
 					oplist.append(path)
-	#stats
-	print "\n\nStats:\nTotal Files:", len(filepathlist)
-	print "Total unique files:", len(hashcount)
-	print "Total files that have duplicates:", len(duphashes)
-	print "Total files that are duplicates:", len(oplist), "\n\n"
+		
+	print("\n\nStats:\nTotal Files:", len(filepathlist))
+	print("Total unique files:", len(hashcount))
+	print("Total files that have duplicates:", len(duphashes))
+	print("Total files that are duplicates:", len(oplist), "\n\n")
 	#print oplist
 	return oplist
 
-#this function only handles what to do with the duplicates, as the checking is done in hashcheck()
-def main(rootdirpath, filetype=None, exclude=[], move_files=True, move_dir='', remove_files=False, logging=False):
+#moving files
+#print hashcheck("/media/xt1/BackThisUp/devices/s2/duplicates/", filetype=['.jpg', '.jpeg', '.png', '.tif', '.webm'])
+#	shutil.move(item, "/media/xt1/BackThisUp/devices/s2/duplicates/"+os.path.basename(item))
+
+def main(rootdirpath, filetype=None, exclude=[], move_files=True, move_dir='', remove_files=False):
 	#get files to move/remove from hashcheck
-	filelist=hashcheck(rootdirpath, filetype=filetype, exclude=exclude, logging=logging) #returns all duplicate files
+	#filelist=[]
+	#for item in rootdirpath:
+	filelist=hashcheck(rootdirpath, filetype=filetype, exclude=exclude) #returns all duplicate files
 	if not filelist:
-		print "Yay! No duplicate items. :)"
+		print( "Yay! No duplicate items. :)")
 		return
+	#else start moving
 	if move_files and os.path.isdir(move_dir):
-		print "Moving duplicates to:", move_dir
+		print("Moving duplicates to:", move_dir)
 		for item in filelist: #moving files
-			print "Moving:", os.path.basename(item)
-			if logging: logtofile("src:"+item+"--dst:"+move_dir+os.path.basename(item)+"\n", filepath=dir_to_move+'movelog') #separated by --
+			print("Moving:", os.path.basename(item))
+			#make destination filepath= common
+			commonpath=os.path.commonprefix([item, move_dir])
+			destdir=os.path.join(move_dir, item.replace(commonpath, '').replace(os.path.basename(item), ''))
+			#print os.path.join(move_dir, destdir)
+			#print destdir
+			if not os.path.exists(destdir):
+				try: 
+					os.makedirs(destdir)
+				except OSError:
+					if not os.path.isdir(destdir):
+						raise
 			try:
-				shutil.move(item, move_dir)
+				shutil.move(item, destdir)
 			except: #file exists
-				shutil.move(item, os.path.join(move_dir, os.path.basename(item)+time.strftime("%Y%m%d%H%M%S"))) #adds timestamp #doesn't replace unless specified			
+				shutil.move(item, os.path.join(destdir, os.path.basename(item)+time.strftime("%Y%m%d%H%M%S"))) #doesn't replace unless specified			
 	elif remove_files:
 		for item in filelist: #USE WITH CAUTION
-			print "Removing:", os.path.basename(item)
-			if logging: logtofile("removing:"+item+"\n", filepath=dir_to_move+'movelog')
+			print("Removing:", os.path.basename(item))
 			os.remove(item)
 
-#RUN
 if __name__=="__main__":
+	if len(sys.argv)>=2:
+		dir_to_check=os.path.abspath(sys.argv[1])
+		dir_to_move=os.path.abspath(sys.argv[2]) if len(sys.argv)>=3  and os.path.exists(os.path.abspath(sys.argv[2])) else os.path.join(dir_to_check, "__duplicates__")
+		
+		#create duplicates dir if not exists
+		if not os.path.exists(dir_to_move):
+			try: 
+  				os.makedirs(dir_to_move)
+			except OSError:
+				if not os.path.isdir(dir_to_move):
+					raise
+		print("Cheking    --> ", dir_to_check)
+		print("Duplicates --> ", dir_to_move)
+		#commonpath=os.path.commonprefix([dir_to_check, dir_to_move])
+		#relpaths=os.path.relpath(dir_to_check, dir_to_move)
+		#print commonpath, relpaths
+		#print dir_to_move+dir_to_check.replace(commonpath, '/')
+		main(dir_to_check, move_files=True, move_dir=dir_to_move, exclude=['__duplicates__'])
 
-	#check paths can be both a single path, or a number of paths in a list (handled in scour())
-        # but dir_to_move must be a single dir
-	dir_to_check='/absolute/path(s)/to/dir/which/is/to/be/checked/'
-	dir_to_move="/absolute/path/to/dir/where/duplicate/files/will/be/moved/"
-	
-	#main funcion
-	main(dir_to_check, move_files=True, move_dir=dir_to_move, exclude=[], logging=True)
+	#show usage
+	else:
+		print("Usage:\npython", sys.argv[0], "/path/to/check", "/path/where/duplicates/go")
+	#dir_to_check='/home/arch/scrap/pix/'
+	#dir_to_check=sys.argv[0]
+	#dir_to_move="/home/arch/scrap/pix/duplicates/"
+	#main(dir_to_check, move_files=True, move_dir=dir_to_move, exclude=['duplicates'])
